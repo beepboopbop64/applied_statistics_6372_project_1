@@ -11,6 +11,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r Load Libraries, warning=FALSE, message=FALSE}
 library(caret)
+library(corrplot)
+library(GGally)
 ```
 # MSDS 6372 Project 1
 
@@ -29,13 +31,59 @@ We would like to predict medical costs for insurance claims.
   * discussion of trends between the response and predictors
 
 ```{r EDA}
+# Set seed for reproducability
+set.seed(1234)
+
 # Read in data
 raw_data <- read.csv("../raw_data/insurance.csv")
 summary(raw_data)
 
+# Change data types
+clean_data <- raw_data
+factor_varibales <- c("sex", "smoker", "region")
+
+for (var in factor_varibales) {
+  clean_data[[var]] <- as.factor(clean_data[[var]])
+}
+  
+# Define the proportion for the training set
+split_perecnt = 0.7
+train_index <- sample(1:nrow(clean_data), nrow(clean_data) * split_perecnt)
+
+train_data <- clean_data[train_index, ]
+validation_data <- clean_data[-train_index, ]
+
+# Display the first few rows of the dataset
+head(train_data)
+
+# Display the structure of the dataset
+str(train_data)
+
+# Summary statistics for each column
+summary(train_data)
+
+# Count missing values in each column
+sapply(train_data, function(x) sum(is.na(x)))
 
 
+correlation_matrix <- cor(train_data[, sapply(train_data, is.numeric)], use="pairwise.complete.obs")
+print(correlation_matrix)
 
+# Visualize the correlation matrix using a heat map
+corrplot(correlation_matrix, method="color")
+
+#Getting fancy
+lowerFn <- function(data, mapping, method = "lm", ...) {
+  p <- ggplot(data = data, mapping = mapping) +
+    geom_point(colour = "blue",size=.2) +
+    geom_smooth(method = loess, color = "red", ...)
+  p
+}
+
+
+ggpairs(train_data[, sapply(train_data, is.numeric)],lower=list(continuous=lowerFn),progress = F)
+
+ggpairs(train_data)
 ```
 
 ## Objective 1
