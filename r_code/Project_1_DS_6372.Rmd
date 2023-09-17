@@ -1,0 +1,83 @@
+---
+title: "Project_1_DS_6372"
+author: "Jake"
+date: "2023-09-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Load Libraries, warning=FALSE, message=FALSE}
+library(caret)
+```
+# MSDS 6372 Project 1
+
+## Goal
+We would like to predict medical costs for insurance claims.
+
+## EDA
+
+### Things we need to do
+  * Deal with missing data if there is any
+  * Clean up variable names
+  * change data types
+  * split data into train/validation split first (then use training data for objectives)
+
+### EDA needs to include
+  * discussion of trends between the response and predictors
+
+```{r EDA}
+# Read in data
+raw_data <- read.csv("../raw_data/insurance.csv")
+summary(raw_data)
+
+
+
+
+```
+
+## Objective 1
+
+We need to create a interpretable model
+
+  * Build a model with the main goal to identify key relationships that is highly interpret able.
+  * Provide interpretation of the regression coefficients
+    - Include hypotheses testing
+    - Interpretation of regression coefficients
+    - Confidence intervals
+    - Mention the practical vs statistical significance of the predictors
+  * Interpretation of at least a subset of the predictors in your final model
+    - Tests on coefficients
+    - assumption checking
+    interpreting those coefficients
+  * Feature selection
+  
+```{r}
+
+```
+
+## Objective 2
+
+Develop a model that can predict the best and do well on future data
+
+  * Train/validation or CV approach for model comparisons
+  * Create a linear regression model WITH complexity (not just include a model with predictors that you've eliminated from objective 1)
+  * Run one non-parametric model to compare to your complex model
+  * Provide measures of fit for comparisons
+    - MSE
+    - R squared / Ajusted R squared
+    - AIC & BIC
+  * Use validation set to show results DO NOT tune model based on validation set
+  * Feature selection and CV are a must here
+  
+ ```{r}
+ 
+ 
+ ```
+  
+
+
+
+
