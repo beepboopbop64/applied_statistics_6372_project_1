@@ -68,28 +68,15 @@ Develop a model that can predict the best and do well on future data
     - AIC & BIC
   * Use validation set to show results DO NOT tune model based on validation set
   * Feature selection and CV are a must here
-  
- ```{r}
- 
- 
- ```
-  
-
-
-
-
-
-
-
-
-
-
 
 ## Loading the data and cleaning up all variables
 
 
 
 ```{r Load the data and clean up}
+# Set the seed for reproducibility
+set.seed(123)
+
 # Define a function to determine if a variable is categorical or continuous
 is_categorical <- function(column, threshold = 10) {
   length(unique(column)) <= threshold
@@ -102,6 +89,19 @@ insurance_data <- read.csv("../raw_data/insurance.csv")
 # Check for missing data
 sum(is.na(insurance_data)) # No missing data
 
+
+# Create BMI categories
+insurance_data$bmi_category <- cut(insurance_data$bmi,
+                                   breaks = c(-Inf, 18.5, 24.9, 29.9, Inf),
+                                   labels = c("Underweight", "Normal weight", "Overweight", "Obesity"))
+
+# Create the 'group' variable
+insurance_data$group <- with(insurance_data, ifelse(smoker == "no" & age < 43, "non-smoker & age<43",
+                                   ifelse(smoker == "no" & age >= 43, "non-smoker & age>=43",
+                                          ifelse(smoker == "yes" & bmi < 30, "smoker & bmi<30", 
+                                                 "smoker & bmi>=30"))))
+
+
 # Convert appropriate columns to factors
 for (column_name in names(insurance_data)) {
   
@@ -112,6 +112,18 @@ for (column_name in names(insurance_data)) {
   }
 }
 
+
+# Determine the size of the dataset and the training set
+n <- nrow(insurance_data)
+train_size <- floor(0.7 * n)
+
+# Get random indices for the training set
+train_indices <- sample(seq_len(n), size = train_size)
+
+# Split the data into training and test sets
+train_data <- insurance_data[train_indices, ]
+test_data <- insurance_data[-train_indices, ]
+insurance_data <- train_data # renaming as insurance_data to make code easier to understand
 
 head(insurance_data)
 str(insurance_data)
@@ -318,13 +330,6 @@ print(table(group3$region))
 
 
 
-# Create BMI categories
-insurance_data$bmi_category <- cut(insurance_data$bmi,
-                                   breaks = c(-Inf, 18.5, 24.9, 29.9, Inf),
-                                   labels = c("Underweight", "Normal weight", "Overweight", "Obesity"))
-
-
-
 # Identify potential categorical columns for faceting
 faceting_columns <- names(insurance_data)[sapply(insurance_data, function(x) is.factor(x))]
 
@@ -346,14 +351,6 @@ fit <- rpart(charges ~ ., data=insurance_data, method="anova")
 # Plot the decision tree
 rpart.plot(fit, yesno=2, type=3, box.palette="RdBu", fallen.leaves=TRUE)
 
-
-# Create the 'group' variable
-insurance_data$group <- with(insurance_data, ifelse(smoker == "no" & age < 43, "non-smoker & age<43",
-                                   ifelse(smoker == "no" & age >= 43, "non-smoker & age>=43",
-                                          ifelse(smoker == "yes" & bmi < 30, "smoker & bmi<30", 
-                                                 "smoker & bmi>=30"))))
-
-insurance_data$group <- as.factor(insurance_data$group)
 
 # Visualize using ggplot2
 library(ggplot2)
