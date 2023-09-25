@@ -15,12 +15,15 @@ library(corrplot)
 library(GGally)
 library(tidyverse)
 library(car)
-library(glmnet)
+library(glmnet) # lasso regression
 library(ggthemes)
 library(vcd)
 library(viridis)
 library(rpart)
 library(rpart.plot)
+library(leaps) # Forward selection
+library(boot) # bootstrap 
+library(lmboot) # bootstrap models
 ```
 # MSDS 6372 Project 1
 
@@ -77,12 +80,6 @@ Develop a model that can predict the best and do well on future data
 # Set the seed for reproducibility
 set.seed(123)
 
-# Define a function to determine if a variable is categorical or continuous
-is_categorical <- function(column, threshold = 10) {
-  length(unique(column)) <= threshold
-}
-
-
 # Load data
 insurance_data <- read.csv("../raw_data/insurance.csv")
 
@@ -91,27 +88,27 @@ sum(is.na(insurance_data)) # No missing data
 
 
 # Create BMI categories
-insurance_data$bmi_category <- cut(insurance_data$bmi,
-                                   breaks = c(-Inf, 18.5, 24.9, 29.9, Inf),
-                                   labels = c("Underweight", "Normal weight", "Overweight", "Obesity"))
+# insurance_data$bmi_category <- cut(insurance_data$bmi,
+#                                    breaks = c(-Inf, 18.5, 24.9, 29.9, Inf),
+#                                    labels = c("Underweight", "Normal weight", "Overweight", "Obesity"))
 
-# Create the 'group' variable
-insurance_data$group <- with(insurance_data, ifelse(smoker == "no" & age < 43, "non-smoker & age<43",
-                                   ifelse(smoker == "no" & age >= 43, "non-smoker & age>=43",
-                                          ifelse(smoker == "yes" & bmi < 30, "smoker & bmi<30", 
-                                                 "smoker & bmi>=30"))))
 
+# Create North or South variable
+# insurance_data$NORS = NA
+# insurance_data$NORS = ifelse(grepl("south", insurance_data$region, ignore.case = TRUE), "south", "north")
 
 # Convert appropriate columns to factors
-for (column_name in names(insurance_data)) {
-  
-  column_data <- insurance_data[[column_name]]
-  
-  if (is_categorical(column_data)) {
-    insurance_data[[column_name]] <- as.factor(column_data)
-  }
+convert_chr_to_factor <- function(df) {
+  df[] <- lapply(df, function(col) {
+    if (is.character(col)) {
+      return(as.factor(col))
+    }
+    return(col)
+  })
+  return(df)
 }
 
+insurance_data <- convert_chr_to_factor(insurance_data)
 
 # Determine the size of the dataset and the training set
 n <- nrow(insurance_data)
@@ -283,52 +280,31 @@ for (cat_col in categorical_columns) {
 
 
 ```{r}
-# Let's determine the quantiles of 'charges'
-quantiles_charges <- quantile(insurance_data$charges, probs = c(0.33, 0.66))
+# Fit the decision tree model
+fit <- rpart(charges ~ ., data=insurance_data, method="anova")
 
-# Segment the data into three groups
-group1 <- insurance_data[insurance_data$charges > quantiles_charges[2], ]
-group2 <- insurance_data[insurance_data$charges <= quantiles_charges[2] & insurance_data$charges > quantiles_charges[1], ]
-group3 <- insurance_data[insurance_data$charges <= quantiles_charges[1], ]
+# Plot the decision tree
+rpart.plot(fit, yesno=2, type=3, box.palette="RdBu", fallen.leaves=TRUE)
 
-# Let's analyze the characteristics of each group
-
-# Proportion of smokers in each group
-cat("Proportion of smokers in Group 1:", mean(group1$smoker == "yes"), "\n")
-cat("Proportion of smokers in Group 2:", mean(group2$smoker == "yes"), "\n")
-cat("Proportion of smokers in Group 3:", mean(group3$smoker == "yes"), "\n")
-
-# Average age in each group
-cat("Average age in Group 1:", mean(group1$age), "\n")
-cat("Average age in Group 2:", mean(group2$age), "\n")
-cat("Average age in Group 3:", mean(group3$age), "\n")
-
-# Average BMI in each group
-cat("Average BMI in Group 1:", mean(group1$bmi), "\n")
-cat("Average BMI in Group 2:", mean(group2$bmi), "\n")
-cat("Average BMI in Group 3:", mean(group3$bmi), "\n")
-
-# Frequency distribution of children in each group
-cat("Frequency distribution of children in Group 1:\n")
-print(table(group1$children))
-
-cat("Frequency distribution of children in Group 2:\n")
-print(table(group2$children))
-
-cat("Frequency distribution of children in Group 3:\n")
-print(table(group3$children))
-
-# Region distribution in each group
-cat("Region distribution in Group 1:\n")
-print(table(group1$region))
-
-cat("Region distribution in Group 2:\n")
-print(table(group2$region))
-
-cat("Region distribution in Group 3:\n")
-print(table(group3$region))
+# create group variable based off decision tree
+insurance_data$group <- with(insurance_data, ifelse(smoker == "no" & age < 43, "non-smoker & age<43",
+                                   ifelse(smoker == "no" & age >= 43, "non-smoker & age>=43",
+                                          ifelse(smoker == "yes" & bmi < 30, "smoker & bmi<30", 
+                                                 "smoker & bmi>=30"))))
+insurance_data$group2 <- with(insurance_data, ifelse(smoker == "no" & bmi < 30, "non-smoker & bmi<30",
+                                   ifelse(smoker == "no" & bmi >= 30, "non-smoker & bmi>=30",
+                                          ifelse(smoker == "yes" & bmi < 30, "smoker & bmi<30", 
+                                                 "smoker & bmi>=30"))))
+insurance_data$group3 <- with(insurance_data, ifelse(smoker == "no" & age < 43 & children == 0, "non-smoker & age<43 & 0children",
+                                   ifelse(smoker == "no" & age < 43 & children != 0, "non-smoker & age<43 & 0children",
+                                   ifelse(smoker == "no" & age >= 43, "non-smoker & age>=43",
+                                          ifelse(smoker == "yes" & bmi < 30, "smoker & bmi<30", 
+                                                 "smoker & bmi>=30")))))
 
 
+insurance_data$group <- as.factor(insurance_data$group)
+insurance_data$group2 <- as.factor(insurance_data$group2)
+insurance_data$group3 <- as.factor(insurance_data$group3)
 
 # Identify potential categorical columns for faceting
 faceting_columns <- names(insurance_data)[sapply(insurance_data, function(x) is.factor(x))]
@@ -345,15 +321,6 @@ for (facet_var in faceting_columns) {
   
 }
 
-# Fit the decision tree model
-fit <- rpart(charges ~ ., data=insurance_data, method="anova")
-
-# Plot the decision tree
-rpart.plot(fit, yesno=2, type=3, box.palette="RdBu", fallen.leaves=TRUE)
-
-
-# Visualize using ggplot2
-library(ggplot2)
 
 p <- ggplot(insurance_data, aes(x=age, y=charges, color=smoker)) +
   geom_point(alpha=0.6) +
@@ -370,14 +337,240 @@ fit <- rpart(charges ~ ., data=insurance_data, method="anova", control=rpart.con
 # Plot the decision tree
 rpart.plot(fit, yesno=2, type=3, box.palette="RdBu", fallen.leaves=TRUE)
 
+
+categorical_columns <- names(insurance_data)[sapply(insurance_data, is.factor) & names(insurance_data) != "smoker"]
+
+for (cat_col in categorical_columns) {
+  plot <- ggplot(insurance_data, aes(x=age, y=charges, color=insurance_data[[cat_col]])) +
+    geom_point(alpha=0.5) +
+    geom_smooth(method="lm", se=FALSE) +
+    labs(title=paste("Relationship between Age and Charges by", cat_col)) +
+    theme_light()
+  print(plot)
+}
+
 ```
 
-## Linear model
+## Linear explainable model
 
 ```{r}
+head(insurance_data)
+str(insurance_data)
+
+# Drop column "B"
+drop_variable_for_feature <- c("group", "group2", "group3")
+insurance_data <- insurance_data[, !colnames(insurance_data) %in% drop_variable_for_feature]
 
 
+#######################
+## Feature selection ##
+#######################
+
+## Lasso feature selection
+
+# Convert factor variables to one-hot encoding
+train_data_encoded <- model.matrix(~ . - 1, data = insurance_data)
+
+# Convert data to matrix form
+exclude_variable_name <- "charges"  # Replace with the actual variable name
+x <- as.matrix(train_data_encoded[, !colnames(train_data_encoded) %in% exclude_variable_name]) # predictors
+y <- train_data$charges # response
+
+# Apply Lasso
+lasso_model <- glmnet(x, y, alpha = 1) # alpha=1 indicates Lasso
+
+# Cross-validation for lambda selection
+cv.lasso <- cv.glmnet(x, y, alpha = 1)
+plot(cv.lasso)
+optimal_lambda <- cv.lasso$lambda.min
+
+# Coefficients at optimal lambda
+coef(lasso_model, s = optimal_lambda)
+
+
+## Forward selection
+
+reg.fwd=regsubsets(charges~.,data=insurance_data,method="forward")
+
+summary(reg.fwd)$adjr2
+summary(reg.fwd)$rss
+summary(reg.fwd)$bic
+
+
+par(mfrow=c(1,3))
+bics<-summary(reg.fwd)$bic
+plot(1:8,bics,type="l",ylab="BIC",xlab="# of predictors")
+index<-which(bics==min(bics))
+points(index,bics[index],col="red",pch=10)
+
+adjr2<-summary(reg.fwd)$adjr2
+plot(1:8,adjr2,type="l",ylab="Adjusted R-squared",xlab="# of predictors")
+index<-which(adjr2==max(adjr2))
+points(index,adjr2[index],col="red",pch=10)
+
+rss<-summary(reg.fwd)$rss
+plot(1:8,rss,type="l",ylab="train RSS",xlab="# of predictors")
+index<-which(rss==min(rss))
+points(index,rss[index],col="red",pch=10)
+
+
+coef(reg.fwd,4)
+print("")
+
+coef(reg.fwd,8)
+print("")
+
+
+##################################
+## Building Interpretable Model ##
+##################################
+
+# Creating all the different types of linear models that don't add too much complexity based off of residuals vs fitted as well as normal Q-Q plots assumptions are not met for any model configuration. 
+simple_linear_model <- lm(charges ~ age + sex + bmi + children + smoker, data = insurance_data)
+par(mfrow=c(2,2))
+plot(simple_linear_model)
+
+log_linear_model <- lm(log(charges) ~ age + sex + bmi + children + smoker, data = insurance_data)
+par(mfrow=c(2,2))
+plot(log_linear_model)
+
+log_log_linear_model <- lm(log(charges) ~ log(age) + sex + log(bmi) + children + smoker, data = insurance_data)
+par(mfrow=c(2,2))
+plot(log_log_linear_model)
+
+interaction_linear_model <- lm(charges ~ age * smoker + sex + bmi + children, data = insurance_data)
+par(mfrow=c(2,2))
+plot(interaction_linear_model)
+summary(interaction_linear_model)
+
+#######################################
+## Simple model for interpratability ##
+#######################################
+
+#PAIRED BOOTSTRAP
+print("Paired Bootstrap")
+boot.p<-paired.boot(charges ~ age + bmi + children + smoker,
+                    B=3000,
+                    seed=1234,
+                    data = insurance_data)
+t(apply(boot.p$bootEstParam,2,quantile,probs=c(.025,.975)))
+
+simple <- lm(charges ~ age + bmi + children + smoker, data = insurance_data)
+summary(simple)
+
+###################
+## Complex model ##
+###################
+
+print("Paired Bootstrap with interaction")
+boot.p<-paired.boot(charges ~ age:smoker + bmi:smoker + children,
+                    B=3000,
+                    seed=1234,
+                    data = insurance_data)
+t(apply(boot.p$bootEstParam,2,quantile,probs=c(.025,.975)))
+
+complex <- lm(charges ~ age:smoker + bmi:smoker + children, data = insurance_data)
+summary(complex)
+
+######################
+## Evaluation Model ##
+######################
+
+evaluate_model <- function(model, test_data) {
+  
+  # 1. Predict on test data
+  test_predictions <- predict(model, newdata = test_data)
+  
+  # 2. Calculate MSE
+  actual_values <- test_data$charges  # replace 'charges' if your response variable name differs
+  errors <- test_predictions - actual_values
+  MSE <- mean(errors^2)
+  
+  # 3. R squared and Adjusted R squared
+  SST <- sum((actual_values - mean(actual_values))^2)
+  SSR <- sum(errors^2)
+  R2 <- 1 - (SSR / SST)
+  
+  # Adjusted R^2
+  n <- length(actual_values)
+  p <- length(coefficients(model)) - 1  # minus one to exclude the intercept
+  Adj_R2 <- 1 - ((1 - R2) * (n - 1) / (n - p - 1))
+  
+  # 4. AIC and BIC
+  AIC_val <- AIC(model, k = 2)  # k=2 by default for linear regression
+  BIC_val <- BIC(model)
+  
+  # Return the metrics
+  metrics <- list(
+    MSE = MSE,
+    R2 = R2,
+    Adj_R2 = Adj_R2,
+    AIC = AIC_val,
+    BIC = BIC_val
+  )
+  
+  return(metrics)
+}
+
+
+metrics.simple <- evaluate_model(simple, test_data)
+metrics.complex <- evaluate_model(complex, test_data)
+print("Simple")
+metrics.simple
+print("Complex")
+metrics.complex
 ```
+
+## KNN
+
+```{r}
+train_data2 = insurance_data
+validation_data2 = test_data
+
+# train_data2$IsSouth = NA
+# train_data2$IsSouth = ifelse(grepl("south", train_data1$region, ignore.case = TRUE), 1, 0)
+train_data2$smoker = ifelse(grepl("yes", insurance_data$smoker, ignore.case = TRUE), 1, 0)
+
+# validation_data2$IsSouth = NA
+# validation_data2$IsSouth = ifelse(grepl("south", validation_data1$region, ignore.case = TRUE), 1, 0)
+validation_data2$smoker = ifelse(grepl("yes", test_data$smoker, ignore.case = TRUE), 1, 0)
+
+
+tuneGrid <- expand.grid(k = c(1:10, 20, 30))
+
+
+fitControl <- trainControl(method = "cv", number = 10)
+
+knn_fit <- train(charges ~ age + bmi + children + smoker, data = train_data2, method = "knn",
+                 trControl = fitControl, tuneGrid=tuneGrid)
+
+print(knn_fit)
+
+
+
+# from the result, we see that K = 6 is the best in terms of RMSE
+predictors = c("age", "bmi", "children", "smoker")
+response = "charges"
+
+trainx = train_data2[, predictors]
+trainy = train_data2$charges
+
+testx = validation_data2[, predictors]
+testy = validation_data2$charges
+
+knn_model <- knnreg(trainx, trainy, k = 9)
+
+plot(testy, predict(knn_model, testx))
+
+test_result = predict(knn_model, testx)
+
+MSE = mean(test_result - testy)^2
+
+print("MSE")
+print(MSE)
+```
+
+
 
 
 
